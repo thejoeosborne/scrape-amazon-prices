@@ -1,0 +1,10 @@
+[project]
+name = "scrape-amazon-prices"
+version = "0.1.0"
+description = "Scrape Amazon prices based on a search query."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "beautifulsoup4>=4.14.0",
+    "curl-cffi>=0.13.0",
+]
