@@ -1,58 +1,65 @@
+import re
+
 from bs4 import BeautifulSoup
 from curl_cffi import requests
 
-from regex_utility import regex_find
 
+async def url_scraper(search_query: str, max_pages: int = None) -> list[str]:
 
-async def collect_urls_by_search_query(search_query: str):
+    # Send a request with a search query and soupify the HTML
     params = {
         "k": search_query
     }
     base_url = "https://www.amazon.com/s"
-
     session = requests.AsyncSession()
-
     res = await session.get(base_url, params=params, impersonate="chrome")
-
     soup = BeautifulSoup(res.text, "html.parser")
 
-    # use regex to find {"totalResultCount":\d+}
-    num_results = regex_find(r'"totalResultCount":(\d+)', res.text)
+    # Use regex to find {"totalResultCount":\d+}
+    num_results = re.search(r'"totalResultCount":(\d+)', res.text).group(1)
     if not num_results:
         raise ValueError("No results found for the brand search.")
     num_results = int(num_results)
 
+    print(f"Found {num_results} results for query: {search_query}")
+
+    # Find the ASINs and create the product URLs
     items = soup.select('div[role="listitem"][data-component-type="s-search-result"]')
     amazon_product_url = "https://www.amazon.com/dp/"
-    links = list(set([amazon_product_url + x.get("data-asin") for x in items]))
+    product_urls = list(set([amazon_product_url + x.get("data-asin") for x in items]))
 
-    num_per_page = len(links)
+    print(f"Found {len(product_urls)} product URLs on the first page")
 
+    # Calculate the number of pages in order to paginate and collect more URLs
+    num_per_page = len(product_urls)
     num_pages = (num_results // num_per_page) + (
         1 if num_results % num_per_page > 0 else 0
     )
 
-    # Paginate through the results
+    # Paginate and repeat the process for each page
     for page in range(2, num_pages + 1):
-        print(f"Fetching page {page} of {num_pages} for query: {query}")
+        print(f"Fetching page {page} of {num_pages}")
         params["page"] = page
         res = await session.get(base_url, params=params, impersonate="chrome")
         soup = BeautifulSoup(res.text, "html.parser")
         items = soup.select(
             'div[role="listitem"][data-component-type="s-search-result"]'
         )
-        links.extend(
+        product_urls.extend(
             list(set([amazon_product_url + x.get("data-asin") for x in items]))
         )
-        break
 
-    all_links = list(set(links))
-    return all_links
+        # If you only want to scrape a certain number of pages, pass in max_pages
+        if max_pages and page >= max_pages:
+            break
+
+    all_product_urls = list(set(product_urls))
+    return all_product_urls
 
 
 if __name__ == "__main__":
     import asyncio
 
-    query = "phone case iphone 17 pro"
-    results = asyncio.run(collect_urls_by_search_query(query))
+    query = "2024 macbook pro m4 max 16 inch"
+    results = asyncio.run(url_scraper(query))
     print(f"Found {len(results)} links for query: {query}")
